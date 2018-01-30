@@ -1,6 +1,9 @@
 package com.mantratec.mapsdemo;
 
 import android.Manifest;
+import android.animation.Animator;
+import android.animation.ArgbEvaluator;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Intent;
@@ -22,6 +25,8 @@ import android.util.Log;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.animation.AccelerateInterpolator;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.EditText;
 import android.widget.Toast;
 
@@ -44,6 +49,7 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MapStyleOptions;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
 
 import org.json.JSONObject;
@@ -79,6 +85,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     private Place placeSource = null, placeDestination = null;
 
+    private static final int GREY = Color.parseColor("#FFA7A6A6");
     private static final int PLACE_AUTOCOMPLETE_REQUEST_CODE = 100;
     private static final String TAG = "MapsDemo";
 
@@ -129,7 +136,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         mMap.setOnMapClickListener(new GoogleMap.OnMapClickListener() {
 
             @Override
-            public void onMapClick(LatLng point) {
+            public void onMapClick(LatLng point)
+            {
                 setupDirections(point);
             }
         });
@@ -498,7 +506,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         // Executes in UI thread, after the parsing process
         @Override
         protected void onPostExecute(List<List<HashMap<String, String>>> result) {
-            ArrayList<LatLng> points;
+            ArrayList<LatLng> points = null;
             PolylineOptions lineOptions = null;
 
             // Traversing through all the routes
@@ -523,20 +531,88 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 // Adding all the points in the route to LineOptions
                 lineOptions.addAll(points);
                 lineOptions.width(10);
-                lineOptions.color(Color.BLACK);
-
                 Log.d("onPostExecute","onPostExecute lineoptions decoded");
-
             }
 
             // Drawing polyline in the Google Map for the i-th route
             if(lineOptions != null) {
-                mMap.addPolyline(lineOptions);
+                // set percentage animation, draw black line on grey line
+                /*final Polyline backgroundPolyline = mMap.addPolyline(lineOptions.color(GREY));
+                final Polyline foregroundPolyline = mMap.addPolyline(lineOptions.color(Color.BLACK));
+                setPolylinePercentageAnimation(foregroundPolyline, backgroundPolyline);*/
+
+                // set color animation
+                final Polyline foregroundPolyline = mMap.addPolyline(lineOptions);
+                setPolylineColorAnimation(foregroundPolyline);
             }
             else {
                 Log.d("onPostExecute","without Polylines drawn");
             }
         }
+    }
+
+    private void setPolylinePercentageAnimation(final Polyline foregroundPolyline, final  Polyline backgroundPolyline)
+    {
+        final ValueAnimator percentageCompletion = ValueAnimator.ofInt(0, 100);
+        percentageCompletion.setDuration(2000);
+        percentageCompletion.setInterpolator(new DecelerateInterpolator());
+        percentageCompletion.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(ValueAnimator animation) {
+                List<LatLng> foregroundPoints = backgroundPolyline.getPoints();
+
+                int percentageValue = (int) animation.getAnimatedValue();
+                int pointcount = foregroundPoints.size();
+                int countTobeRemoved = (int) (pointcount * (percentageValue / 100.0f));
+                List<LatLng> subListTobeRemoved = foregroundPoints.subList(0, countTobeRemoved);
+                subListTobeRemoved.clear();
+
+                foregroundPolyline.setPoints(foregroundPoints);
+            }
+        });
+        percentageCompletion.addListener(new Animator.AnimatorListener() {
+            @Override
+            public void onAnimationStart(Animator animation) {
+
+            }
+
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                foregroundPolyline.setColor(GREY);
+                foregroundPolyline.setPoints(backgroundPolyline.getPoints());
+            }
+
+            @Override
+            public void onAnimationCancel(Animator animation) {
+
+            }
+
+            @Override
+            public void onAnimationRepeat(Animator animation) {
+
+            }
+        });
+        percentageCompletion.setRepeatCount(ValueAnimator.INFINITE);
+        percentageCompletion.setRepeatMode(ValueAnimator.REVERSE);
+        percentageCompletion.start();
+    }
+
+    private void setPolylineColorAnimation(final Polyline foregroundPolyline)
+    {
+        ValueAnimator colorAnimation = ValueAnimator.ofObject(new ArgbEvaluator(), GREY, Color.BLACK);
+        colorAnimation.setInterpolator(new AccelerateInterpolator());
+        colorAnimation.setDuration(1000); // milliseconds
+
+        colorAnimation.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(ValueAnimator animator) {
+                foregroundPolyline.setColor((int) animator.getAnimatedValue());
+            }
+        });
+
+        colorAnimation.setRepeatCount(ValueAnimator.INFINITE);
+        colorAnimation.setRepeatMode(ValueAnimator.REVERSE);
+        colorAnimation.start();
     }
 
     protected synchronized void buildGoogleApiClient() {
